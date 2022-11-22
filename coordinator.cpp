@@ -4,7 +4,6 @@
 #include <string>
 #include <netdb.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 using namespace std::literals;
@@ -21,9 +20,8 @@ int main(int argc, char* argv[]) {
       return 1;
    }
 
-   // 1. Allow workers to connect socket(), bind(), listen(), accept(), see: https://beej.us/guide/bgnet/html/#system-calls-or-bust
-   // 1.1. getaddrinfo()
-   //const size_t bufferSize = 1024;
+   /// 1. Allow workers to connect socket(), bind(), listen(), accept(), see: https://beej.us/guide/bgnet/html/#system-calls-or-bust
+   /// 1.1. getaddrinfo()
    const char* portNumber = argv[2];
    const int backlog = 1;
    int serverSocket;
@@ -41,7 +39,7 @@ int main(int argc, char* argv[]) {
    }
    std::cout << "Coordinator socket translated." << std::endl;
 
-   // 1.2. socket()
+   /// 1.2. socket()
    for (record = results; record != NULL; record = record->ai_next) {
       serverSocket = socket(record->ai_family, record->ai_socktype, record->ai_protocol); // Attempt to create socket from information provided in current record
       // Skip current iteration in the loop if socket creation failss
@@ -50,7 +48,7 @@ int main(int argc, char* argv[]) {
       }
       int enable = 1;
       setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)); // Configure server socket to reuse same port. Helpful if the server needs to restart
-      // 1.3. bind()
+      /// 1.3. bind()
       if (bind(serverSocket, record->ai_addr, record->ai_addrlen) == 0) {
          break;
       }
@@ -65,17 +63,17 @@ int main(int argc, char* argv[]) {
    freeaddrinfo(results);
    std::cout << "Server socket created and bound." << std::endl;
 
-   // 1.4. listen()
+   /// 1.4. listen()
    if (listen(serverSocket, backlog) == -1) { // Start server socket listen
       std::perror("Failed to start server socket listen.");
       exit(EXIT_FAILURE);
    }
    std::cout << "Server started listening." << std::endl;
 
-   // 2. Distribute the following work among workers send() them some work
-   while (1) {
+   /// 2. Distribute the following work among workers send() them some work
+   while (true) {
       std::cout << "Coordinator still running" << std::endl;
-      // 2.1. accept()
+      /// 2.1. accept()
       int clientSocket;
       struct sockaddr clientAddress;
       socklen_t clientAddressLength = sizeof(clientAddress);
@@ -84,25 +82,45 @@ int main(int argc, char* argv[]) {
          std::perror("Failed to accept client socket.");
          exit(EXIT_FAILURE);
       }
-      std::cout << "Client socket accepted." << std::endl;
+      std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
+      /// 2.2. find the next work item
+      auto curlSetup = CurlGlobalSetup();
 
-      // 2.2. send()
-      std::string message = "Hello from the coordinator";
-      if (send(clientSocket, message.c_str(), message.length(), 0) < 0) {
-         std::perror("Failed to send message to client.");
-         exit(EXIT_FAILURE);
-      }
+      auto listUrl = std::string(argv[1]);
 
-      // 3. Collect all results recv() the results
-      char buffer[1024];
-      if (recv(clientSocket, buffer, sizeof(buffer), 0) == -1) { // Read message
-         perror("Failed to receive message.");
-         exit(EXIT_FAILURE);
+      // Download the file list
+      auto curl = CurlEasyPtr::easyInit();
+      curl.setUrl(listUrl);
+      auto fileList = curl.performToStringStream();
+
+      size_t sum = 0;
+      // Iterate over all files
+      for (std::string url; std::getline(fileList, url, '\n');) {
+         /// 2.3. send()
+         if (send(clientSocket, url.c_str(), strlen(url.c_str()), 0) < 0) {
+            std::perror("Failed to send message to client.");
+            exit(EXIT_FAILURE);
+         }
+         /// 3. Collect all results recv() the results
+         int buffer[1024];
+         if (recv(clientSocket, &buffer, sizeof(buffer), 0) == -1) { // Read message
+            perror("Failed to receive message.");
+            exit(EXIT_FAILURE);
+         }
+         std::cout << "Message received: " << *buffer << std::endl;
+         std::cout << "Message received: " << strlen("file:///Users/konstantinosalexoudis/Code/src/gitlab.lrz.de/kalexoudis/group-25-assignment-3/data/test.00.csv") << std::endl;
+         sum += static_cast<unsigned long>(*buffer);
       }
-      std::cout << "Message received: " << buffer << std::endl;
+      std::cout << sum << std::endl;
+      break;
    }
-   // Hint: Think about how you track which worker got what work
-
+   /// 4. Close the socket close()
+   close(serverSocket);
+   std::cout << "Coordinator finished." << std::endl;
+   return 0;
+}
+// Hint: Think about how you track which worker got what work
+/*
    auto curlSetup = CurlGlobalSetup();
 
    auto listUrl = std::string(argv[1]);
@@ -138,8 +156,5 @@ int main(int argc, char* argv[]) {
          }
       }
    }
-
    std::cout << result << std::endl;
-
-   return 0;
-}
+   */

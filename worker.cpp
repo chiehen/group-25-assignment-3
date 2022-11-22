@@ -1,14 +1,50 @@
+#include "CurlEasyPtr.h"
 #include <cstdio>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+using namespace std::literals;
+
 /// Worker process that receives a list of URLs and reports the result
 /// Example:
 ///    ./worker localhost 4242
 /// The worker then contacts the leader process on "localhost" port "4242" for work
+
+size_t processFile(std::string url) {
+   size_t result = 0;
+   auto curlSetup = CurlGlobalSetup();
+   auto curl = CurlEasyPtr::easyInit();
+
+   curl.setUrl(url);
+   auto csvData = curl.performToStringStream();
+
+   for (std::string row; std::getline(csvData, row, '\n');) {
+      auto rowStream = std::stringstream(std::move(row));
+
+      // Check the URL in the second column
+      unsigned columnIndex = 0;
+      for (std::string column; std::getline(rowStream, column, '\t'); ++columnIndex) {
+         // column 0 is id, 1 is URL
+         if (columnIndex == 1) {
+            // Check if URL is "google.ru"
+            auto pos = column.find("://"sv);
+            if (pos != std::string::npos) {
+               auto afterProtocol = std::string_view(column).substr(pos + 3);
+               if (afterProtocol.starts_with("google.ru/")) {
+                  ++result;
+               }
+            }
+            break;
+         }
+      }
+   }
+   return result;
+}
+
 int main(int argc, char* argv[]) {
    std::cout << "Worker started!" << std::endl;
 
@@ -19,7 +55,7 @@ int main(int argc, char* argv[]) {
 
    // 1. connect to coordinator specified by host and port getaddrinfo(), connect(), see: https://beej.us/guide/bgnet/html/#system-calls-or-bust
    // 1.1. getaddrinfo()
-   const size_t bufferSize = 1024;
+   const size_t bufferSize = 2048;
    const char* hostName = argv[1];
    const char* portNumber = argv[2];
    int clientSocket;
@@ -61,33 +97,35 @@ int main(int argc, char* argv[]) {
 
    // 2. receive work from coordinator recv(), matching the coordinator's send() work
    // 2.1. recv()
-   char buffer[bufferSize];
+   while (true) {
+      char buffer[bufferSize];
+      size_t found = 0;
 
-   if (recv(clientSocket, buffer, sizeof(buffer), 0) == -1) { // Read message
-      perror("Failed to receive message.");
-      exit(EXIT_FAILURE);
-   }
+      if (recv(clientSocket, buffer, sizeof(buffer), 0) == -1) { // Read message
+         perror("Failed to receive message.");
+         exit(EXIT_FAILURE);
+      }
+      //    3. process work see coordinator.cpp
+      //    3.1. process work
+      std::cout << "Worker received message: " << buffer << std::endl;
+      std::string file(buffer);
+      file = file.substr(0, 108);
+      std::cout << "Worker received message: " << file << std::endl;
+      found = processFile(file);
 
-   printf("---------- RECEIVED MESSAGE ----------\n%s\n----------- END OF MESSAGE -----------\n", buffer);
-
-   //    3. process work see coordinator.cpp
-   //    3.1. process work
-   const char* message = "Hello from worker!";
-
-   // 4. report result send(), matching the coordinator's recv()
-   if (send(clientSocket, message, strlen(message), 0) == -1) { // Send data
-      std::perror("Failed to perform cognitive recalibration."); // Error message for when send() fails
-      exit(EXIT_FAILURE);
-   } else {
-      std::cout << "Subliminal message has been planted." << std::endl;
+      // 4. report result send(), matching the coordinator's recv()
+      if (send(clientSocket, &found, sizeof(found), 0) == -1) { // Send data
+         std::perror("Failed to perform cognitive recalibration."); // Error message for when send() fails
+         exit(EXIT_FAILURE);
+      } else {
+         std::cout << "Subliminal message has been planted." << std::endl;
+      }
    }
 
    // 6. close connection close()
    close(clientSocket);
-   std::cout << "Worker socket closed." << std::endl;
 
-   // TODO:
-   //    5. repeat
+   std::cout << "Worker socket closed." << std::endl;
 
    return 0;
 }
