@@ -5,8 +5,39 @@
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <cstring>
+#include <deque>
+#include <poll.h>
 
 using namespace std::literals;
+
+
+// Add a new file descriptor to the set
+void add_to_pfds(struct pollfd *pfds[], int newfd, int *fd_count, int *fd_size)
+{
+    // If we don't have room, add more space in the pfds array
+    if (*fd_count == *fd_size) {
+        *fd_size *= 2; // Double it
+
+        *pfds = (pollfd *)realloc(*pfds, sizeof(**pfds) * (*fd_size));
+    }
+
+    (*pfds)[*fd_count].fd = newfd;
+    (*pfds)[*fd_count].events = POLLIN | POLLOUT; // Check ready-to-read, ready-to-send
+
+    (*fd_count)++;
+}
+
+// Remove an index from the set
+void del_from_pfds(struct pollfd pfds[], int i, int *fd_count)
+{
+    // Copy the one from the end over this one
+    pfds[i] = pfds[*fd_count-1];
+
+    (*fd_count)--;
+}
+
+
 
 /// Leader process that coordinates workers. Workers connect on the specified port
 /// and the coordinator distributes the work of the CSV file list.
@@ -70,55 +101,100 @@ int main(int argc, char* argv[]) {
    }
    std::cout << "Server started listening." << std::endl;
 
+   auto curlSetup = CurlGlobalSetup();
+
+   auto listUrl = std::string(argv[1]);
+
+   // Download the file list
+   auto curl = CurlEasyPtr::easyInit();
+   curl.setUrl(listUrl);
+   auto fileList = curl.performToStringStream();
+
+   // track un-assigned urls
+   std::deque<std::string> jobs;
+
+   for (std::string url; std::getline(fileList, url, '\n');) {
+      jobs.push_back(url);
+   }
+
    /// 2. Distribute the following work among workers send() them some work
-   while (true) {
-      std::cout << "Coordinator still running" << std::endl;
-      /// 2.1. accept()
-      int clientSocket;
-      struct sockaddr clientAddress;
-      socklen_t clientAddressLength = sizeof(clientAddress);
+   
+   std::cout << "Coordinator still running" << std::endl;
+   // Start off with room for 5 connections
+   // (We'll realloc as necessary)
+   int fd_count = 0;
+   int fd_size = 5;
+   struct pollfd *pfds = (pollfd *)malloc(sizeof *pfds * fd_size);
 
-      if ((clientSocket = accept(serverSocket, &clientAddress, &clientAddressLength)) < 0) {
-         std::perror("Failed to accept client socket.");
-         exit(EXIT_FAILURE);
+   // Add the serverSocket to set
+   pfds[0].fd = serverSocket;
+   pfds[0].events = POLLIN; // Report ready to read on incoming connection
+
+   fd_count = 1; // For the serverSocket
+   while (true) {  
+      int poll_count = poll(pfds, fd_count, -1);
+
+      if (poll_count == -1) {
+            perror("poll");
+            exit(1);
       }
-      std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
-      /// 2.2. find the next work item
-      auto curlSetup = CurlGlobalSetup();
-
-      auto listUrl = std::string(argv[1]);
-
-      // Download the file list
-      auto curl = CurlEasyPtr::easyInit();
-      curl.setUrl(listUrl);
-      auto fileList = curl.performToStringStream();
-
-      size_t sum = 0;
-      // Iterate over all files
-      for (std::string url; std::getline(fileList, url, '\n');) {
-         /// 2.3. send()
-         if (send(clientSocket, url.c_str(), strlen(url.c_str()), 0) < 0) {
-            std::perror("Failed to send message to client.");
-            exit(EXIT_FAILURE);
-         }
-         /// 3. Collect all results recv() the results
-         int buffer[1024];
-         if (recv(clientSocket, &buffer, sizeof(buffer), 0) == -1) { // Read message
-            perror("Failed to receive message.");
-            exit(EXIT_FAILURE);
-         }
-         std::cout << "Message received: " << *buffer << std::endl;
-         std::cout << "Message received: " << strlen("file:///Users/konstantinosalexoudis/Code/src/gitlab.lrz.de/kalexoudis/group-25-assignment-3/data/test.00.csv") << std::endl;
-         sum += static_cast<unsigned long>(*buffer);
+      
+      for(int i = 0; i < fd_count; i++) {
+         if (pfds[i].revents & (POLLIN | POLLOUT)) {
+            if (pfds[i].fd == serverSocket) {
+               // 2.1 
+               // new incoing connection
+               int clientSocket;
+               struct sockaddr clientAddress;
+               socklen_t clientAddressLength = sizeof(clientAddress);
+               if ((clientSocket = accept(serverSocket, &clientAddress, &clientAddressLength)) < 0) {
+                  std::perror("Failed to accept client socket.");
+                  exit(EXIT_FAILURE);
+               }
+               std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
+               add_to_pfds(&pfds, clientSocket, &fd_count, &fd_size);
+            } else {
+               // regular worker
+               if (pfds[i].revents & POLLOUT) {
+                  /// 2.3. send()
+                  std::string url = jobs.front();
+                  jobs.pop_front();
+                  if (send(pfds[i].fd, url.c_str(), strlen(url.c_str()), 0) < 0) {
+                     std::perror("Failed to send message to client.");
+                     exit(EXIT_FAILURE);
+                  }
+                  /// 2.4 add to JobMap & busyWorker
+               } 
+               if (pfds[i].revents & POLLIN) {
+                  /// 3. Collect all results recv() the results
+                  int buffer[1024];
+                  ssize_t nbytes = recv(pfds[i].fd, &buffer, sizeof(buffer), 0);
+                  if (nbytes == -1) {
+                     perror("Failed to receive message.");
+                     exit(EXIT_FAILURE);
+                  } else if (nbytes == 0)
+                  {
+                     // Connection closed
+                     /// 3.2 handle failed node
+                     std::cout << "Socket:\t" << pfds[i].fd << " Connection closed for unknown resons." << std::endl;
+                  } else {
+                     /// 3.1 Add result from client to sum
+                     std::cout << "Message received: " << *buffer << std::endl;
+                     // parse buffer
+                     // sum += static_cast<unsigned long>(*buffer);
+                  }
+                  
+               }
+            }
+         } 
       }
-      std::cout << sum << std::endl;
-      break;
    }
    /// 4. Close the socket close()
    close(serverSocket);
    std::cout << "Coordinator finished." << std::endl;
    return 0;
 }
+
 // Hint: Think about how you track which worker got what work
 /*
    auto curlSetup = CurlGlobalSetup();
