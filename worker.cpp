@@ -98,6 +98,7 @@ int main(int argc, char* argv[]) {
 
    // 2. receive work from coordinator recv(), matching the coordinator's send() work
    // 2.1. recv()
+   int job_received = 0;
    while (true) {
       char buffer[bufferSize];
       size_t found = 0;
@@ -110,6 +111,7 @@ int main(int argc, char* argv[]) {
       //    3.1. process work
       std::cout << "Worker received message: " << buffer << std::endl;
       std::string file(buffer);
+      job_received ++;
       file = file.substr(0, 108);
       std::cout << "Worker received message: " << file << std::endl;
       found = processFile(file);
@@ -119,7 +121,7 @@ int main(int argc, char* argv[]) {
          std::perror("Failed to perform cognitive recalibration."); // Error message for when send() fails
          exit(EXIT_FAILURE);
       } else {
-         std::cout << "Subliminal message has been planted." << std::endl;
+         std::cout << "Worker sent" << found << std::endl;
       }
    }
 

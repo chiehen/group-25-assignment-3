@@ -8,6 +8,7 @@
 #include <cstring>
 #include <deque>
 #include <poll.h>
+#include <map>
 
 using namespace std::literals;
 
@@ -110,6 +111,7 @@ int main(int argc, char* argv[]) {
    curl.setUrl(listUrl);
    auto fileList = curl.performToStringStream();
 
+   //TODO: change to list
    // track un-assigned urls
    std::deque<std::string> jobs;
 
@@ -126,12 +128,23 @@ int main(int argc, char* argv[]) {
    int fd_size = 5;
    struct pollfd *pfds = (pollfd *)malloc(sizeof *pfds * fd_size);
 
+   // <fd, job_list>
+   std::map<int, std::deque<std::string>> jobMap;
+   // <fd, job_count>
+   std::map<int, int> busyWorker;
+
    // Add the serverSocket to set
    pfds[0].fd = serverSocket;
    pfds[0].events = POLLIN; // Report ready to read on incoming connection
 
    fd_count = 1; // For the serverSocket
    while (true) {  
+      std::cout << "Server started pollling." << std::endl;
+      if (busyWorker.empty() && jobs.empty()) {
+         std::cout << "Server completed the jobs." << std::endl;
+         break;
+      }
+      
       int poll_count = poll(pfds, fd_count, -1);
 
       if (poll_count == -1) {
@@ -140,6 +153,7 @@ int main(int argc, char* argv[]) {
       }
       
       for(int i = 0; i < fd_count; i++) {
+         int fd = pfds[i].fd;
          if (pfds[i].revents & (POLLIN | POLLOUT)) {
             if (pfds[i].fd == serverSocket) {
                // 2.1 
@@ -153,6 +167,8 @@ int main(int argc, char* argv[]) {
                }
                std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
                add_to_pfds(&pfds, clientSocket, &fd_count, &fd_size);
+
+               i --;  // to have more connections at once
             } else {
                // regular worker
                if (pfds[i].revents & POLLOUT) {
@@ -164,6 +180,15 @@ int main(int argc, char* argv[]) {
                      exit(EXIT_FAILURE);
                   }
                   /// 2.4 add to JobMap & busyWorker
+                  if (jobMap.count(fd)>0) {
+                     jobMap[fd].push_back(url);
+                     busyWorker[fd]++;
+                  } else {
+                     std::deque<std::string> workerJob = {url};
+                     jobMap.insert({fd, workerJob});
+                     busyWorker.insert({fd, 1});
+                  }
+
                } 
                if (pfds[i].revents & POLLIN) {
                   /// 3. Collect all results recv() the results
@@ -179,8 +204,14 @@ int main(int argc, char* argv[]) {
                      std::cout << "Socket:\t" << pfds[i].fd << " Connection closed for unknown resons." << std::endl;
                   } else {
                      /// 3.1 Add result from client to sum
-                     std::cout << "Message received: " << *buffer << std::endl;
+                     std::cout << "Server: Message received: " << *buffer << std::endl;
                      // parse buffer
+                     jobMap[fd].pop_front();
+                     busyWorker[fd]--;
+                     if (busyWorker[fd] == 0) {
+                        jobMap.erase(fd);
+                        busyWorker.erase(fd);
+                     }
                      // sum += static_cast<unsigned long>(*buffer);
                   }
                   
@@ -190,6 +221,9 @@ int main(int argc, char* argv[]) {
       }
    }
    /// 4. Close the socket close()
+   for(int i = 0; i < fd_count; i++) {
+      close(pfds[i].fd);
+   }
    close(serverSocket);
    std::cout << "Coordinator finished." << std::endl;
    return 0;
