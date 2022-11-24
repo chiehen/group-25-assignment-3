@@ -149,7 +149,6 @@ int main(int argc, char* argv[]) {
       }
       
       int poll_count = poll(pfds, fd_count, -1);
-      std::cout << "Server polll count." << poll_count << std::endl;
       if (poll_count == -1) {
             perror("poll");
             exit(1);
@@ -157,8 +156,8 @@ int main(int argc, char* argv[]) {
       
       for(int i = 0; i < fd_count; i++) {
          int fd = pfds[i].fd;
-         std::cout << "Server work on fd:\t" << fd << std::endl;
          if (pfds[i].revents & (POLLIN | POLLOUT)) {
+            std::cout << "Server work on fd:\t" << fd << std::endl;
             if (pfds[i].fd == serverSocket && (pfds[i].revents & POLLIN) ) {
                std::cout << "SeverSocket:\t" << (pfds[i].revents & POLLIN) << std::endl;
                // 2.1 
@@ -172,8 +171,9 @@ int main(int argc, char* argv[]) {
                }
                std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
                add_to_pfds(&pfds, clientSocket, &fd_count, &fd_size);
-               
-               break;  // to have more connections at once
+               // to have more connections at once
+               sleep(1);
+               break;
             } else {
                // regular worker
                if (pfds[i].revents & POLLOUT) {

@@ -116,12 +116,10 @@ int main(int argc, char* argv[]) {
       } else if (nbytes == 0) {
          // server closed
          std::cout << "Worker: server socket closed." << std::endl;
-         sleep(10);
-         // if (noWork) {
-         //    break;
-         // }
-         // noWork = true;
-         // continue;
+         sleep(15);
+         // TODO: should change to break, but not working
+         std::cout << "Worker completes:" << job_received <<" jobs." << std::endl;
+         continue;
       }
       urlLen = static_cast<size_t> (*buffer);
       ssize_t receive;
