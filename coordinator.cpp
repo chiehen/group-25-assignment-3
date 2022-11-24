@@ -171,26 +171,29 @@ int main(int argc, char* argv[]) {
                }
                std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
                add_to_pfds(&pfds, clientSocket, &fd_count, &fd_size);
-               // TODO: fix no more connection but (pfds[i].revents & POLLIN) == 1
-               // i --;  // to have more connections at once
+               
+               break;  // to have more connections at once
             } else {
                // regular worker
                if (pfds[i].revents & POLLOUT) {
-                  /// 2.3. send()
-                  std::string url = jobs.front();
-                  jobs.pop_front();
-                  if (send(pfds[i].fd, url.c_str(), strlen(url.c_str()), 0) < 0) {
-                     std::perror("Failed to send message to client.");
-                     exit(EXIT_FAILURE);
-                  }
-                  /// 2.4 add to JobMap & busyWorker
-                  if (jobMap.count(fd)>0) {
-                     jobMap[fd].push_back(url);
-                     busyWorker[fd]++;
-                  } else {
-                     std::deque<std::string> workerJob = {url};
-                     jobMap.insert({fd, workerJob});
-                     busyWorker.insert({fd, 1});
+                  /// 2.3. send() when queue is not empty
+                  // TODO: check queue is not empty
+                  if (!jobs.empty()) {
+                     std::string url = jobs.front();
+                     jobs.pop_front();
+                     if (send(pfds[i].fd, url.c_str(), strlen(url.c_str()), 0) < 0) {
+                        std::perror("Failed to send message to client.");
+                        exit(EXIT_FAILURE);
+                     }
+                     /// 2.4 add to JobMap & busyWorker
+                     if (jobMap.count(fd)>0) {
+                        jobMap[fd].push_back(url);
+                        busyWorker[fd]++;
+                     } else {
+                        std::deque<std::string> workerJob = {url};
+                        jobMap.insert({fd, workerJob});
+                        busyWorker.insert({fd, 1});
+                     }
                   }
 
                } 
@@ -218,7 +221,6 @@ int main(int argc, char* argv[]) {
                      }
                      sum += static_cast<unsigned long>(*buffer);
                   }
-                  
                }
             }
          } 
