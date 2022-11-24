@@ -136,6 +136,8 @@ int main(int argc, char* argv[]) {
    // Add the serverSocket to set
    pfds[0].fd = serverSocket;
    pfds[0].events = POLLIN; // Report ready to read on incoming connection
+   
+   unsigned long sum = 0;
 
    fd_count = 1; // For the serverSocket
    while (true) {  
@@ -146,7 +148,7 @@ int main(int argc, char* argv[]) {
       }
       
       int poll_count = poll(pfds, fd_count, -1);
-
+      std::cout << "Server polll count." << poll_count << std::endl;
       if (poll_count == -1) {
             perror("poll");
             exit(1);
@@ -154,8 +156,10 @@ int main(int argc, char* argv[]) {
       
       for(int i = 0; i < fd_count; i++) {
          int fd = pfds[i].fd;
+         std::cout << "Server work on fd:\t" << fd << std::endl;
          if (pfds[i].revents & (POLLIN | POLLOUT)) {
-            if (pfds[i].fd == serverSocket) {
+            if (pfds[i].fd == serverSocket && (pfds[i].revents & POLLIN) ) {
+               std::cout << "SeverSocket:\t" << (pfds[i].revents & POLLIN) << std::endl;
                // 2.1 
                // new incoing connection
                int clientSocket;
@@ -167,8 +171,8 @@ int main(int argc, char* argv[]) {
                }
                std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
                add_to_pfds(&pfds, clientSocket, &fd_count, &fd_size);
-
-               i --;  // to have more connections at once
+               // TODO: fix no more connection but (pfds[i].revents & POLLIN) == 1
+               // i --;  // to have more connections at once
             } else {
                // regular worker
                if (pfds[i].revents & POLLOUT) {
@@ -212,7 +216,7 @@ int main(int argc, char* argv[]) {
                         jobMap.erase(fd);
                         busyWorker.erase(fd);
                      }
-                     // sum += static_cast<unsigned long>(*buffer);
+                     sum += static_cast<unsigned long>(*buffer);
                   }
                   
                }
@@ -225,6 +229,7 @@ int main(int argc, char* argv[]) {
       close(pfds[i].fd);
    }
    close(serverSocket);
+   std::cout << "Sum: " << sum << std::endl;
    std::cout << "Coordinator finished." << std::endl;
    return 0;
 }

@@ -7,6 +7,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <cstring>
+// TODO: remove sleep
+#include<unistd.h>               // for linux 
 
 using namespace std::literals;
 
@@ -47,6 +49,9 @@ size_t processFile(std::string url) {
 }
 
 int main(int argc, char* argv[]) {
+   // TODO: fix connect and remove sleep
+   sleep(1);   
+   
    std::cout << "Worker started!" << std::endl;
 
    if (argc != 3) {
