@@ -115,6 +115,7 @@ int main(int argc, char* argv[]) {
    // track un-assigned urls
    std::deque<std::string> jobs;
 
+   std::cout << "Jobs:" << std::endl;
    for (std::string url; std::getline(fileList, url, '\n');) {
       jobs.push_back(url);
    }
@@ -137,7 +138,7 @@ int main(int argc, char* argv[]) {
    pfds[0].fd = serverSocket;
    pfds[0].events = POLLIN; // Report ready to read on incoming connection
    
-   unsigned long sum = 0;
+   size_t sum = 0;
 
    fd_count = 1; // For the serverSocket
    while (true) {  
@@ -181,7 +182,13 @@ int main(int argc, char* argv[]) {
                   if (!jobs.empty()) {
                      std::string url = jobs.front();
                      jobs.pop_front();
-                     if (send(pfds[i].fd, url.c_str(), strlen(url.c_str()), 0) < 0) {
+                     size_t urlLen = strlen(url.c_str());
+                     std::cout << "Server send Message: " << url << std::endl;
+                     if (send(pfds[i].fd, &urlLen, sizeof(urlLen), 0) < 0) {
+                        std::perror("Failed to send message to client.");
+                        exit(EXIT_FAILURE);
+                     }
+                     if (send(pfds[i].fd, url.c_str(), urlLen, 0) < 0) {
                         std::perror("Failed to send message to client.");
                         exit(EXIT_FAILURE);
                      }
@@ -200,7 +207,7 @@ int main(int argc, char* argv[]) {
                if (pfds[i].revents & POLLIN) {
                   /// 3. Collect all results recv() the results
                   int buffer[1024];
-                  ssize_t nbytes = recv(pfds[i].fd, &buffer, sizeof(buffer), 0);
+                  ssize_t nbytes = recv(pfds[i].fd, &buffer, sizeof(sum), 0);
                   if (nbytes == -1) {
                      perror("Failed to receive message.");
                      exit(EXIT_FAILURE);
@@ -219,7 +226,8 @@ int main(int argc, char* argv[]) {
                         jobMap.erase(fd);
                         busyWorker.erase(fd);
                      }
-                     sum += static_cast<unsigned long>(*buffer);
+                     sum += static_cast<size_t>(*buffer);
+                     std::cout << "sum: " << sum << std::endl;
                   }
                }
             }
@@ -230,48 +238,9 @@ int main(int argc, char* argv[]) {
    for(int i = 0; i < fd_count; i++) {
       close(pfds[i].fd);
    }
+   free(pfds);
    close(serverSocket);
-   std::cout << "Sum: " << sum << std::endl;
    std::cout << "Coordinator finished." << std::endl;
+   std::cout << sum << std::endl;
    return 0;
 }
-
-// Hint: Think about how you track which worker got what work
-/*
-   auto curlSetup = CurlGlobalSetup();
-
-   auto listUrl = std::string(argv[1]);
-
-   // Download the file list
-   auto curl = CurlEasyPtr::easyInit();
-   curl.setUrl(listUrl);
-   auto fileList = curl.performToStringStream();
-
-   size_t result = 0;
-   // Iterate over all files
-   for (std::string url; std::getline(fileList, url, '\n');) {
-      curl.setUrl(url);
-      // Download them
-      auto csvData = curl.performToStringStream();
-      for (std::string row; std::getline(csvData, row, '\n');) {
-         auto rowStream = std::stringstream(std::move(row));
-
-         // Check the URL in the second column
-         unsigned columnIndex = 0;
-         for (std::string column; std::getline(rowStream, column, '\t'); ++columnIndex) {
-            // column 0 is id, 1 is URL
-            if (columnIndex == 1) {
-               // Check if URL is "google.ru"
-               auto pos = column.find("://"sv);
-               if (pos != std::string::npos) {
-                  auto afterProtocol = std::string_view(column).substr(pos + 3);
-                  if (afterProtocol.starts_with("google.ru/"))
-                     ++result;
-               }
-               break;
-            }
-         }
-      }
-   }
-   std::cout << result << std::endl;
-   */

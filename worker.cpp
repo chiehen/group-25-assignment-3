@@ -103,22 +103,45 @@ int main(int argc, char* argv[]) {
 
    // 2. receive work from coordinator recv(), matching the coordinator's send() work
    // 2.1. recv()
+   // int noWork = false;
    int job_received = 0;
    while (true) {
       char buffer[bufferSize];
       size_t found = 0;
-
-      if (recv(clientSocket, buffer, sizeof(buffer), 0) == -1) { // Read message
+      size_t urlLen;
+      ssize_t nbytes=recv(clientSocket, buffer, sizeof(urlLen), 0);
+      if (nbytes == -1) { // Read message
+         perror("Failed to receive message.");
+         exit(EXIT_FAILURE);
+      } else if (nbytes == 0) {
+         // server closed
+         std::cout << "Worker: server socket closed." << std::endl;
+         sleep(10);
+         // if (noWork) {
+         //    break;
+         // }
+         // noWork = true;
+         // continue;
+      }
+      urlLen = static_cast<size_t> (*buffer);
+      ssize_t receive;
+      std::cout << "urlLen: " << urlLen << std::endl;
+      if ((receive = recv(clientSocket, buffer, urlLen, MSG_WAITALL)) == -1) { // Read message
          perror("Failed to receive message.");
          exit(EXIT_FAILURE);
       }
+      if (urlLen != (size_t) receive) {
+         std::cout << "Didn't receive enough data, only" << receive << "bytes." << std::endl;
+         continue;
+      }
+
       //    3. process work see coordinator.cpp
       //    3.1. process work
       std::cout << "Worker received message: " << buffer << std::endl;
       std::string file(buffer);
       job_received ++;
       file = file.substr(0, 108);
-      std::cout << "Worker received message: " << file << std::endl;
+      
       found = processFile(file);
 
       // 4. report result send(), matching the coordinator's recv()
