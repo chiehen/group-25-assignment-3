@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
       size_t found = 0;
       size_t urlLen;
       ssize_t nbytes=recv(clientSocket, buffer, sizeof(urlLen), 0);
-      if (nbytes == -1) { // Read message
+      if (nbytes < 1) { // Read message
          perror("Failed to receive message.");
          exit(EXIT_FAILURE);
       } else if (nbytes == 0) {
