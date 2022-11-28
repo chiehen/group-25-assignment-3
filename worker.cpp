@@ -1,14 +1,14 @@
 #include "CurlEasyPtr.h"
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <cstring>
 // TODO: remove sleep
-#include<unistd.h>               // for linux 
+#include <unistd.h> // for linux
 
 using namespace std::literals;
 
@@ -50,8 +50,8 @@ size_t processFile(std::string url) {
 
 int main(int argc, char* argv[]) {
    // TODO: fix connect and remove sleep
-   sleep(1);   
-   
+   sleep(1);
+
    std::cout << "Worker started!" << std::endl;
 
    if (argc != 3) {
@@ -109,19 +109,20 @@ int main(int argc, char* argv[]) {
       char buffer[bufferSize];
       size_t found = 0;
       size_t urlLen;
-      ssize_t nbytes=recv(clientSocket, buffer, sizeof(urlLen), 0);
+      ssize_t nbytes = recv(clientSocket, buffer, sizeof(urlLen), 0);
       if (nbytes == -1) { // Read message
          perror("Failed to receive message.");
          exit(EXIT_FAILURE);
       } else if (nbytes == 0) {
          // server closed
          std::cout << "Worker: server socket closed." << std::endl;
-         sleep(15);
+         break;
+         //sleep(15);
          // TODO: should change to break, but not working
-         std::cout << "Worker completes:" << job_received <<" jobs." << std::endl;
+         std::cout << "Worker completes:" << job_received << " jobs." << std::endl;
          continue;
       }
-      urlLen = static_cast<size_t> (*buffer);
+      urlLen = static_cast<size_t>(*buffer);
       ssize_t receive;
       std::cout << "urlLen: " << urlLen << std::endl;
       if ((receive = recv(clientSocket, buffer, urlLen, MSG_WAITALL)) == -1) { // Read message
@@ -137,9 +138,9 @@ int main(int argc, char* argv[]) {
       //    3.1. process work
       std::cout << "Worker received message: " << buffer << std::endl;
       std::string file(buffer);
-      job_received ++;
+      job_received++;
       file = file.substr(0, 108);
-      
+
       found = processFile(file);
 
       // 4. report result send(), matching the coordinator's recv()
@@ -147,7 +148,7 @@ int main(int argc, char* argv[]) {
          std::perror("Failed to perform cognitive recalibration."); // Error message for when send() fails
          exit(EXIT_FAILURE);
       } else {
-         std::cout << "Worker sent" << found << std::endl;
+         std::cout << "Worker sent: " << found << std::endl;
       }
    }
 

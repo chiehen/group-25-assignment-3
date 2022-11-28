@@ -1,44 +1,39 @@
 #include "CurlEasyPtr.h"
+#include <cstring>
+#include <deque>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <netdb.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <cstring>
-#include <deque>
-#include <poll.h>
-#include <map>
 
 using namespace std::literals;
 
-
 // Add a new file descriptor to the set
-void add_to_pfds(struct pollfd *pfds[], int newfd, int *fd_count, int *fd_size)
-{
-    // If we don't have room, add more space in the pfds array
-    if (*fd_count == *fd_size) {
-        *fd_size *= 2; // Double it
+void add_to_pfds(struct pollfd* pfds[], int newfd, size_t* fd_count, size_t* fd_size) {
+   // If we don't have room, add more space in the pfds array
+   if (*fd_count == *fd_size) {
+      *fd_size *= 2; // Double it
 
-        *pfds = (pollfd *)realloc(*pfds, sizeof(**pfds) * (*fd_size));
-    }
+      *pfds = (pollfd*) realloc(*pfds, sizeof(**pfds) * (*fd_size));
+   }
 
-    (*pfds)[*fd_count].fd = newfd;
-    (*pfds)[*fd_count].events = POLLIN | POLLOUT; // Check ready-to-read, ready-to-send
+   (*pfds)[*fd_count].fd = newfd;
+   (*pfds)[*fd_count].events = POLLIN | POLLOUT; // Check ready-to-read, ready-to-send
 
-    (*fd_count)++;
+   (*fd_count)++;
 }
 
 // Remove an index from the set
-void del_from_pfds(struct pollfd pfds[], int i, int *fd_count)
-{
-    // Copy the one from the end over this one
-    pfds[i] = pfds[*fd_count-1];
+void del_from_pfds(struct pollfd pfds[], int i, int* fd_count) {
+   // Copy the one from the end over this one
+   pfds[i] = pfds[*fd_count - 1];
 
-    (*fd_count)--;
+   (*fd_count)--;
 }
-
-
 
 /// Leader process that coordinates workers. Workers connect on the specified port
 /// and the coordinator distributes the work of the CSV file list.
@@ -121,13 +116,13 @@ int main(int argc, char* argv[]) {
    }
 
    /// 2. Distribute the following work among workers send() them some work
-   
+
    std::cout << "Coordinator still running" << std::endl;
    // Start off with room for 5 connections
    // (We'll realloc as necessary)
-   int fd_count = 0;
-   int fd_size = 5;
-   struct pollfd *pfds = (pollfd *)malloc(sizeof *pfds * fd_size);
+   size_t fd_count = 0;
+   size_t fd_size = 5;
+   struct pollfd* pfds = (pollfd*) malloc(sizeof *pfds * fd_size);
 
    // <fd, job_list>
    std::map<int, std::deque<std::string>> jobMap;
@@ -137,30 +132,30 @@ int main(int argc, char* argv[]) {
    // Add the serverSocket to set
    pfds[0].fd = serverSocket;
    pfds[0].events = POLLIN; // Report ready to read on incoming connection
-   
+
    size_t sum = 0;
 
    fd_count = 1; // For the serverSocket
-   while (true) {  
+   while (true) {
       std::cout << "Server started pollling." << std::endl;
       if (busyWorker.empty() && jobs.empty()) {
          std::cout << "Server completed the jobs." << std::endl;
          break;
       }
-      
-      int poll_count = poll(pfds, fd_count, -1);
+
+      int poll_count = poll(pfds, static_cast<nfds_t>(fd_count), -1);
       if (poll_count == -1) {
-            perror("poll");
-            exit(1);
+         perror("poll");
+         exit(1);
       }
-      
-      for(int i = 0; i < fd_count; i++) {
+
+      for (size_t i = 0; i < fd_count; i++) {
          int fd = pfds[i].fd;
          if (pfds[i].revents & (POLLIN | POLLOUT)) {
             std::cout << "Server work on fd:\t" << fd << std::endl;
-            if (pfds[i].fd == serverSocket && (pfds[i].revents & POLLIN) ) {
+            if (pfds[i].fd == serverSocket && (pfds[i].revents & POLLIN)) {
                std::cout << "SeverSocket:\t" << (pfds[i].revents & POLLIN) << std::endl;
-               // 2.1 
+               // 2.1
                // new incoing connection
                int clientSocket;
                struct sockaddr clientAddress;
@@ -193,7 +188,7 @@ int main(int argc, char* argv[]) {
                         exit(EXIT_FAILURE);
                      }
                      /// 2.4 add to JobMap & busyWorker
-                     if (jobMap.count(fd)>0) {
+                     if (jobMap.count(fd) > 0) {
                         jobMap[fd].push_back(url);
                         busyWorker[fd]++;
                      } else {
@@ -202,8 +197,7 @@ int main(int argc, char* argv[]) {
                         busyWorker.insert({fd, 1});
                      }
                   }
-
-               } 
+               }
                if (pfds[i].revents & POLLIN) {
                   /// 3. Collect all results recv() the results
                   int buffer[1024];
@@ -211,8 +205,7 @@ int main(int argc, char* argv[]) {
                   if (nbytes == -1) {
                      perror("Failed to receive message.");
                      exit(EXIT_FAILURE);
-                  } else if (nbytes == 0)
-                  {
+                  } else if (nbytes == 0) {
                      // Connection closed
                      /// 3.2 handle failed node
                      std::cout << "Socket:\t" << pfds[i].fd << " Connection closed for unknown resons." << std::endl;
@@ -231,11 +224,11 @@ int main(int argc, char* argv[]) {
                   }
                }
             }
-         } 
+         }
       }
    }
    /// 4. Close the socket close()
-   for(int i = 0; i < fd_count; i++) {
+   for (size_t i = 0; i < fd_count; i++) {
       close(pfds[i].fd);
    }
    free(pfds);
