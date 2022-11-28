@@ -40,7 +40,7 @@ void del_from_pfds(struct pollfd pfds[], int i, int* fd_count) {
 /// Example:
 ///    ./coordinator http://example.org/filelist.csv 4242
 int main(int argc, char* argv[]) {
-   std::cout << "Coordinator started." << std::endl;
+   // std::cout << "Coordinator started." << std::endl;
 
    if (argc != 3) {
       std::cerr << "Usage: " << argv[0] << " <URL to csv list> <listen port>" << std::endl;
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
       std::perror("Failed to translate coordinator socket.");
       exit(EXIT_FAILURE);
    }
-   std::cout << "Coordinator socket translated." << std::endl;
+   // std::cout << "Coordinator socket translated." << std::endl;
 
    /// 1.2. socket()
    for (record = results; record != NULL; record = record->ai_next) {
@@ -88,14 +88,14 @@ int main(int argc, char* argv[]) {
       exit(EXIT_FAILURE);
    }
    freeaddrinfo(results);
-   std::cout << "Server socket created and bound." << std::endl;
+   // std::cout << "Server socket created and bound." << std::endl;
 
    /// 1.4. listen()
    if (listen(serverSocket, backlog) == -1) { // Start server socket listen
       std::perror("Failed to start server socket listen.");
       exit(EXIT_FAILURE);
    }
-   std::cout << "Server started listening." << std::endl;
+   // std::cout << "Server started listening." << std::endl;
 
    auto curlSetup = CurlGlobalSetup();
 
@@ -110,14 +110,14 @@ int main(int argc, char* argv[]) {
    // track un-assigned urls
    std::deque<std::string> jobs;
 
-   std::cout << "Jobs:" << std::endl;
+   // std::cout << "Jobs:" << std::endl;
    for (std::string url; std::getline(fileList, url, '\n');) {
       jobs.push_back(url);
    }
 
    /// 2. Distribute the following work among workers send() them some work
-
-   std::cout << "Coordinator still running" << std::endl;
+   
+   // std::cout << "Coordinator still running" << std::endl;
    // Start off with room for 5 connections
    // (We'll realloc as necessary)
    size_t fd_count = 0;
@@ -136,10 +136,10 @@ int main(int argc, char* argv[]) {
    size_t sum = 0;
 
    fd_count = 1; // For the serverSocket
-   while (true) {
-      std::cout << "Server started pollling." << std::endl;
+   while (true) {  
+      // std::cout << "Server started pollling." << std::endl;
       if (busyWorker.empty() && jobs.empty()) {
-         std::cout << "Server completed the jobs." << std::endl;
+         // std::cout << "Server completed the jobs." << std::endl;
          break;
       }
 
@@ -152,10 +152,10 @@ int main(int argc, char* argv[]) {
       for (size_t i = 0; i < fd_count; i++) {
          int fd = pfds[i].fd;
          if (pfds[i].revents & (POLLIN | POLLOUT)) {
-            std::cout << "Server work on fd:\t" << fd << std::endl;
-            if (pfds[i].fd == serverSocket && (pfds[i].revents & POLLIN)) {
-               std::cout << "SeverSocket:\t" << (pfds[i].revents & POLLIN) << std::endl;
-               // 2.1
+            // std::cout << "Server work on fd:\t" << fd << std::endl;
+            if (pfds[i].fd == serverSocket && (pfds[i].revents & POLLIN) ) {
+               // std::cout << "SeverSocket:\t" << (pfds[i].revents & POLLIN) << std::endl;
+               // 2.1 
                // new incoing connection
                int clientSocket;
                struct sockaddr clientAddress;
@@ -164,7 +164,7 @@ int main(int argc, char* argv[]) {
                   std::perror("Failed to accept client socket.");
                   exit(EXIT_FAILURE);
                }
-               std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
+               // std::cout << "Socket:\t" << clientSocket << " Client socket accepted." << std::endl;
                add_to_pfds(&pfds, clientSocket, &fd_count, &fd_size);
                // to have more connections at once
                sleep(1);
@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
                      std::string url = jobs.front();
                      jobs.pop_front();
                      size_t urlLen = strlen(url.c_str());
-                     std::cout << "Server send Message: " << url << std::endl;
+                     // std::cout << "Server send Message: " << url << std::endl;
                      if (send(pfds[i].fd, &urlLen, sizeof(urlLen), 0) < 0) {
                         std::perror("Failed to send message to client.");
                         exit(EXIT_FAILURE);
@@ -208,10 +208,10 @@ int main(int argc, char* argv[]) {
                   } else if (nbytes == 0) {
                      // Connection closed
                      /// 3.2 handle failed node
-                     std::cout << "Socket:\t" << pfds[i].fd << " Connection closed for unknown resons." << std::endl;
+                     // std::cout << "Socket:\t" << pfds[i].fd << " Connection closed for unknown resons." << std::endl;
                   } else {
                      /// 3.1 Add result from client to sum
-                     std::cout << "Server: Message received: " << *buffer << std::endl;
+                     // std::cout << "Server: Message received: " << *buffer << std::endl;
                      // parse buffer
                      jobMap[fd].pop_front();
                      busyWorker[fd]--;
@@ -220,7 +220,7 @@ int main(int argc, char* argv[]) {
                         busyWorker.erase(fd);
                      }
                      sum += static_cast<size_t>(*buffer);
-                     std::cout << "sum: " << sum << std::endl;
+                     // std::cout << "sum: " << sum << std::endl;
                   }
                }
             }
@@ -233,7 +233,7 @@ int main(int argc, char* argv[]) {
    }
    free(pfds);
    close(serverSocket);
-   std::cout << "Coordinator finished." << std::endl;
+   // std::cout << "Coordinator finished." << std::endl;
    std::cout << sum << std::endl;
    return 0;
 }

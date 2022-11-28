@@ -50,9 +50,9 @@ size_t processFile(std::string url) {
 
 int main(int argc, char* argv[]) {
    // TODO: fix connect and remove sleep
-   sleep(1);
-
-   std::cout << "Worker started!" << std::endl;
+   sleep(1);   
+   
+   // std::cout << "Worker started!" << std::endl;
 
    if (argc != 3) {
       std::cerr << "Usage: " << argv[0] << " <host> <port>" << std::endl;
@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
       std::perror("Failed to translate worker socket.");
       exit(EXIT_FAILURE);
    }
-   std::cout << "Worker socket translated." << std::endl;
+   // std::cout << "Worker socket translated." << std::endl;
 
    // 1.2. connect()
    for (record = results; record != NULL; record = record->ai_next) { // Iterate through every record in results
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
       exit(EXIT_FAILURE);
    }
    freeaddrinfo(results);
-   std::cout << "Worker socket created and connected." << std::endl;
+   // std::cout << "Worker socket created and connected." << std::endl;
 
    // 2. receive work from coordinator recv(), matching the coordinator's send() work
    // 2.1. recv()
@@ -109,34 +109,32 @@ int main(int argc, char* argv[]) {
       char buffer[bufferSize];
       size_t found = 0;
       size_t urlLen;
-      ssize_t nbytes = recv(clientSocket, buffer, sizeof(urlLen), 0);
-      if (nbytes == -1) { // Read message
+      ssize_t nbytes=recv(clientSocket, buffer, sizeof(urlLen), 0);
+      if (nbytes < 0) { // Read message
          perror("Failed to receive message.");
          exit(EXIT_FAILURE);
       } else if (nbytes == 0) {
          // server closed
-         std::cout << "Worker: server socket closed." << std::endl;
-         break;
-         //sleep(15);
+         // std::cout << "Worker: server socket closed." << std::endl;
          // TODO: should change to break, but not working
-         std::cout << "Worker completes:" << job_received << " jobs." << std::endl;
-         continue;
+         // std::cout << "Worker completes:" << job_received <<" jobs." << std::endl;
+         exit(EXIT_SUCCESS);
       }
       urlLen = static_cast<size_t>(*buffer);
       ssize_t receive;
-      std::cout << "urlLen: " << urlLen << std::endl;
+      // std::cout << "urlLen: " << urlLen << std::endl;
       if ((receive = recv(clientSocket, buffer, urlLen, MSG_WAITALL)) == -1) { // Read message
          perror("Failed to receive message.");
          exit(EXIT_FAILURE);
       }
       if (urlLen != (size_t) receive) {
-         std::cout << "Didn't receive enough data, only" << receive << "bytes." << std::endl;
+         // std::cout << "Didn't receive enough data, only" << receive << "bytes." << std::endl;
          continue;
       }
 
       //    3. process work see coordinator.cpp
       //    3.1. process work
-      std::cout << "Worker received message: " << buffer << std::endl;
+      // std::cout << "Worker received message: " << buffer << std::endl;
       std::string file(buffer);
       job_received++;
       file = file.substr(0, 108);
@@ -148,14 +146,14 @@ int main(int argc, char* argv[]) {
          std::perror("Failed to perform cognitive recalibration."); // Error message for when send() fails
          exit(EXIT_FAILURE);
       } else {
-         std::cout << "Worker sent: " << found << std::endl;
+         // std::cout << "Worker sent" << found << std::endl;
       }
    }
 
    // 6. close connection close()
    close(clientSocket);
 
-   std::cout << "Worker socket closed." << std::endl;
+   // std::cout << "Worker socket closed." << std::endl;
 
    return 0;
 }
