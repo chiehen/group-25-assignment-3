@@ -1,6 +1,5 @@
 #ifndef CBDP_CURLEASYPTR_H
 #define CBDP_CURLEASYPTR_H
-
 #include <string>
 
 using CURL = void;
