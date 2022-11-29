@@ -28,7 +28,7 @@ void add_to_pfds(struct pollfd* pfds[], int newfd, size_t* fd_count, size_t* fd_
 }
 
 // Remove an index from the set
-void del_from_pfds(struct pollfd pfds[], int i, int* fd_count) {
+void del_from_pfds(struct pollfd pfds[], int i, size_t* fd_count) {
    // Copy the one from the end over this one
    pfds[i] = pfds[*fd_count - 1];
 
@@ -151,6 +151,18 @@ int main(int argc, char* argv[]) {
 
       for (size_t i = 0; i < fd_count; i++) {
          int fd = pfds[i].fd;
+         if (pfds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+               /// 3.2 handle failed node
+               while (!jobMap[fd].empty()) {
+                  std::string url = jobMap[fd].front();
+                  jobs.push_back(url);
+                  jobMap[fd].pop_front();
+               }
+               jobMap.erase(fd);
+               busyWorker.erase(fd);
+               del_from_pfds(pfds, (int)i, &fd_count);
+               continue;
+            }
          if (pfds[i].revents & (POLLIN | POLLOUT)) {
             // std::cout << "Server work on fd:\t" << fd << std::endl;
             if (pfds[i].fd == serverSocket && (pfds[i].revents & POLLIN) ) {
@@ -206,9 +218,7 @@ int main(int argc, char* argv[]) {
                      perror("Failed to receive message.");
                      exit(EXIT_FAILURE);
                   } else if (nbytes == 0) {
-                     // Connection closed
-                     /// 3.2 handle failed node
-                     // std::cout << "Socket:\t" << pfds[i].fd << " Connection closed for unknown resons." << std::endl;
+                     continue;
                   } else {
                      /// 3.1 Add result from client to sum
                      // std::cout << "Server: Message received: " << *buffer << std::endl;
