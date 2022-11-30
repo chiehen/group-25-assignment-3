@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
    /// 1. Allow workers to connect socket(), bind(), listen(), accept(), see: https://beej.us/guide/bgnet/html/#system-calls-or-bust
    /// 1.1. getaddrinfo()
    const char* portNumber = argv[2];
-   const int backlog = 1;
+   const int backlog = 16;
    int serverSocket;
    struct addrinfo hints;
    memset(&hints, 0, sizeof(struct addrinfo));
